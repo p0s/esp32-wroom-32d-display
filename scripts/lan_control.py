@@ -291,7 +291,7 @@ def run_input_self_test(base_url: str, password: str) -> dict[str, object]:
         authenticated_request(
             f"{base_url}/api/self-test?input=1", password, "POST"
         ),
-        timeout=20,
+        timeout=35,
     )
     if status != 200:
         raise RuntimeError(f"input self-test returned HTTP {status}")
@@ -299,17 +299,18 @@ def run_input_self_test(base_url: str, password: str) -> dict[str, object]:
     if not isinstance(result, dict) or result.get("pass") is not True:
         raise RuntimeError("input self-test did not pass")
     expected = {
-        "schema": 3,
-        "releaseDelta": 40,
+        "schema": 4,
+        "releaseDelta": 8,
         "shortPressDelta": 4,
-        "doubleClickDelta": 18,
-        "longPressDelta": 1,
-        "secondPressLatchDelta": 18,
+        "doubleClickDelta": 2,
+        "longPressDelta": 18,
+        "secondPressLatchDelta": 2,
         "navigationPassed": True,
         "pageToLauncher": True,
         "launcherToPage": True,
         "nestedBack": True,
-        "longPressMenu": True,
+        "longPressBack": True,
+        "doubleClickFallback": True,
         "secondPressGrace": True,
         "queuedPulse": True,
         "edgeQueueHealthy": True,
@@ -326,13 +327,15 @@ def run_input_self_test(base_url: str, password: str) -> dict[str, object]:
     state = read_state(base_url, password)
     self_test = state.get("selfTest", {})
     if (
-        self_test.get("schema") != 3
+        self_test.get("schema") != 4
         or self_test.get("inputPassed") is not True
         or self_test.get("navigationPassed") is not True
         or self_test.get("pageRoundTrips") != 9
         or self_test.get("pageRoundTripsExpected") != 9
         or self_test.get("backActions") != 4
         or self_test.get("backActionsExpected") != 4
+        or self_test.get("longPressBack") is not True
+        or self_test.get("doubleClickFallback") is not True
         or self_test.get("queuedPulse") is not True
         or self_test.get("edgeQueueHealthy") is not True
         or self_test.get("stateRestored") is not True

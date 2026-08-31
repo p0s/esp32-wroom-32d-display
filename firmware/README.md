@@ -9,7 +9,9 @@ Overview fills the usable screen with 107-pixel quota digits, a wide progress
 bar, reset strip, and navigation footer. Applet and settings screens use
 full-width focus rows with stable typography instead of small side-by-side
 cards. Applets, LED settings, sound settings, and display settings expose a
-visible one-click Back action; double-click and hold remain global fallbacks.
+visible one-click Back action. Holding for 800 ms is the reliable global Back
+gesture on every page and closes the launcher; double-click remains a
+compatibility fallback.
 
 Full pages are composed in the same 4-bit mirror used by authenticated screen
 capture, then transferred to the LCD in one complete raster transaction. Menu
@@ -90,21 +92,24 @@ use a separate CP2102/CH340-style 3.3 V UART adapter for data and programming.
 Other ESP32 boards may have native USB data and should follow their board-specific
 flashing method. Never connect adapter power and never unplug during OTA.
 
-Single-click selects or acts after a 550 ms double-click window. A second press
+Single-click selects or acts after a 550 ms double-click window. Holding for
+800 ms goes back to the launcher from every page and closes the launcher when
+it is already open. A second press
 that begins inside that window is latched until release, so its first click can
 never activate a launcher item while the second click is still held.
-Double-click goes back to the launcher (or closes it), and long-press also opens
-it. Turning from Overview, Connection, or About and pausing 1.5 seconds remains
+Double-click retains the same behavior as a compatibility fallback. Turning
+from Overview, Connection, or About and pausing 1.5 seconds remains
 the no-button fallback. The authenticated web UI provides exact virtual turn,
 press, back, and hold controls plus logical screen readback. Encoder and GPIO5
 button edges are interrupt-latched. GPIO5 keeps a bounded timestamped edge
 queue, so a complete click remains visible even when a full-frame transfer
 temporarily blocks the main loop; the same 8 ms debounce filters contact bounce.
 `/api/self-test?input=1` drives the electrical GPIO5 path and must prove a
-complete queued click with no polling during the gesture, all nine page/launcher
-round trips, all four visible one-click Back actions, long-press navigation,
-second-press grace, exact counters, and restoration of the prior screen. This
-semantic result is mandatory in routine OTA and LAN gates. Rapid
+complete queued click with no polling during the gesture, long-press Back round
+trips across all nine pages, launcher close, all four visible one-click Back
+actions, double-click compatibility, second-press grace, exact counters, and
+restoration of the prior screen. This semantic result is mandatory in routine
+OTA and LAN gates. Rapid
 setting changes are persisted in one coalesced
 NVS session with only the changed legacy-compatible keys written. Authenticated
 state reports the pending mask, session count, key-write attempts, and failures

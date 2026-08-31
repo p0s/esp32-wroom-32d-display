@@ -37,7 +37,7 @@ constexpr int kEncoderB = 17;
 constexpr gpio_num_t kRgbLedPin = GPIO_NUM_18;
 constexpr int kEncoderEdgesPerDetent = 2;
 constexpr uint32_t kButtonDebounceMs = 8;
-constexpr uint32_t kButtonLongPressMs = 1000;
+constexpr uint32_t kButtonLongPressMs = 800;
 constexpr uint32_t kDoubleClickMs = 550;
 constexpr uint8_t kButtonEdgeQueueCapacity = 32;
 constexpr uint32_t kButtonEncoderGuardMs = 40;
@@ -581,7 +581,8 @@ bool inputSelfTestNavigationPassed = false;
 bool inputSelfTestPageToLauncher = false;
 bool inputSelfTestLauncherToPage = false;
 bool inputSelfTestNestedBack = false;
-bool inputSelfTestLongPress = false;
+bool inputSelfTestLongPressBack = false;
+bool inputSelfTestDoubleClickFallback = false;
 bool inputSelfTestSecondPressGrace = false;
 bool inputSelfTestQueuedPulse = false;
 bool inputSelfTestQueueHealthy = false;
@@ -1133,6 +1134,18 @@ void openMenuFromInput(const char *method) {
   recordNavigation(method, fromPage, fromMenu);
 }
 
+void toggleLauncherFromInput(const char *method) {
+  const Page fromPage = currentPage;
+  const bool fromMenu = menuOpen;
+  if (menuOpen) {
+    menuOpen = false;
+  } else {
+    openMenu();
+  }
+  recordNavigation(method, fromPage, fromMenu);
+  needsRender = true;
+}
+
 void title(const char *value) {
   display.fillScreen(kBlack);
   display.fillRect(0, 0, kWidth, 32, kBlue);
@@ -1243,7 +1256,7 @@ void renderOverview() {
   } else if (isStale()) {
     display.text(258, 176, "STALE", kAmber, 1);
   }
-  footer("CLICK MENU  DOUBLE BACK  HOLD MENU");
+  footer("CLICK MENU  HOLD BACK");
 }
 
 void renderWindows() {
@@ -1263,7 +1276,7 @@ void renderWindows() {
       display.text(18, y + 26, budget.windows[i].window, kMuted, 1);
     }
   }
-  footer("TURN SCROLL  DOUBLE BACK  HOLD MENU");
+  footer("TURN SCROLL  HOLD BACK");
 }
 
 void renderConnection() {
@@ -1288,7 +1301,7 @@ void renderConnection() {
                : (accessPointReady ? "192.168.4.1" : "OFFLINE"),
                kBlue, 2);
   display.text(202, 148, "LOGIN: XSURE", kMuted, 1);
-  footer("CLICK OR TURN MENU  DOUBLE BACK  HOLD");
+  footer("CLICK OR TURN MENU  HOLD BACK");
 }
 
 void renderTimerClock(bool includeStatus = true) {
@@ -1315,8 +1328,8 @@ void renderTimer() {
                                      : "TURN: 5 MIN  CLICK: START",
                    kMuted, 1);
   footer(workTimer.running
-             ? "CLICK PAUSE  DOUBLE BACK  HOLD MENU"
-             : "TURN 5 MIN  CLICK START  DOUBLE BACK  HOLD");
+             ? "CLICK PAUSE  HOLD BACK"
+             : "TURN 5 MIN  CLICK START  HOLD BACK");
 }
 
 void renderApplets() {
@@ -1343,7 +1356,7 @@ void renderApplets() {
   display.centered(160, active,
                    codexAppletInstalled || timerAppletInstalled ? kGreen : kAmber, 1);
   drawBackAction(174, appletIndex == 2);
-  footer("TURN SELECT  CLICK ACT  DOUBLE BACK  HOLD");
+  footer("TURN SELECT  CLICK ACT  HOLD BACK");
 }
 
 void renderLeds() {
@@ -1356,7 +1369,7 @@ void renderLeds() {
   drawSettingRow(124, "EVENT GLOW", ledFeedbackEnabled ? "ON" : "OFF",
                  ledField == 2, ledFeedbackEnabled ? kGreen : kMuted);
   drawBackAction(174, ledField == 3);
-  footer("TURN CHANGE  CLICK NEXT  DOUBLE BACK  HOLD");
+  footer("TURN CHANGE  CLICK NEXT  HOLD BACK");
 }
 
 void renderDisplay() {
@@ -1371,7 +1384,7 @@ void renderDisplay() {
   display.text(42, 160, "10 MIN", kMuted, 1);
   rightAligned(278, 160, "100 MAX", kMuted, 1);
   drawBackAction(174);
-  footer("TURN ADJUST  CLICK BACK  DOUBLE BACK  HOLD");
+  footer("TURN ADJUST  CLICK BACK  HOLD BACK");
 }
 
 void renderSounds() {
@@ -1384,7 +1397,7 @@ void renderSounds() {
   drawSettingRow(124, "TEST CUE", soundProfileIndex ? "PLAY" : "MUTED",
                  soundField == 2, soundProfileIndex ? kGreen : kMuted);
   drawBackAction(174, soundField == 3);
-  footer("TURN CHANGE  CLICK NEXT  DOUBLE BACK  HOLD");
+  footer("TURN CHANGE  CLICK NEXT  HOLD BACK");
 }
 
 void renderAbout() {
@@ -1394,7 +1407,7 @@ void renderAbout() {
   display.text(50, 126, "FIRMWARE " CODEX_BUDGET_FIRMWARE_VERSION, kMuted, 1);
   display.text(50, 148, "ESP32-WROOM-32D", kMuted, 1);
   display.text(50, 170, "FACTORY RESTORE SAVED", kGreen, 1);
-  footer("CLICK MENU  DOUBLE BACK  HOLD MENU");
+  footer("CLICK MENU  HOLD BACK");
 }
 
 int menuFirstIndex(int selected, int count) {
@@ -1424,7 +1437,7 @@ void renderMenu() {
     const int index = first + row;
     renderMenuRow(entries[index], row, index == menuIndex);
   }
-  footer("TURN SELECT  CLICK OPEN  DOUBLE CLOSE");
+  footer("TURN SELECT  CLICK OPEN  HOLD CLOSE");
 }
 
 void render() {
@@ -1664,8 +1677,10 @@ void longPress(InputSource source = InputSource::Physical) {
     ++remoteInputCount;
   }
   menuDwellArmed = false;
-  if (!menuOpen) openMenuFromInput("LONG_PRESS");
-  Serial.printf("input button=long page=%s menu=1\n", pageName(currentPage));
+  toggleLauncherFromInput(source == InputSource::Remote ? "REMOTE_HOLD_BACK"
+                                                         : "LONG_PRESS_BACK");
+  Serial.printf("input button=long-back page=%s menu=%d\n", pageName(currentPage),
+                menuOpen);
 }
 
 void navigateBack(InputSource source = InputSource::Physical) {
@@ -1675,16 +1690,8 @@ void navigateBack(InputSource source = InputSource::Physical) {
     ++remoteInputCount;
   }
   menuDwellArmed = false;
-  const Page fromPage = currentPage;
-  const bool fromMenu = menuOpen;
-  if (menuOpen) {
-    menuOpen = false;
-  } else {
-    openMenu();
-  }
-  recordNavigation(source == InputSource::Remote ? "REMOTE_BACK" : "DOUBLE_CLICK",
-                   fromPage, fromMenu);
-  needsRender = true;
+  toggleLauncherFromInput(source == InputSource::Remote ? "REMOTE_BACK"
+                                                         : "DOUBLE_CLICK");
   Serial.printf("input back page=%s menu=%d\n", pageName(currentPage), menuOpen);
 }
 
@@ -1840,6 +1847,13 @@ void selfTestDoubleClick(bool holdSecondPastSingleDeadline = false) {
   serviceButtonFor(30);
 }
 
+void selfTestLongPress() {
+  selfTestButtonLevel(true);
+  serviceButtonFor(kButtonLongPressMs + 30);
+  selfTestButtonLevel(false);
+  serviceButtonFor(20);
+}
+
 bool runInputSelfTest(uint32_t &releaseDelta, uint32_t &shortDelta,
                       uint32_t &doubleDelta, uint32_t &longDelta,
                       uint32_t &latchDelta) {
@@ -1880,7 +1894,8 @@ bool runInputSelfTest(uint32_t &releaseDelta, uint32_t &shortDelta,
   inputSelfTestPageToLauncher = true;
   inputSelfTestLauncherToPage = true;
   inputSelfTestNestedBack = false;
-  inputSelfTestLongPress = false;
+  inputSelfTestLongPressBack = false;
+  inputSelfTestDoubleClickFallback = false;
   inputSelfTestSecondPressGrace = false;
   inputSelfTestQueuedPulse = false;
   inputSelfTestQueueHealthy = false;
@@ -1892,25 +1907,36 @@ bool runInputSelfTest(uint32_t &releaseDelta, uint32_t &shortDelta,
     currentPage = testedPages[index];
     menuOpen = false;
     resetSelfTestClickState();
-    selfTestDoubleClick(index == 0);
+    selfTestLongPress();
     const bool opened = menuOpen && currentPage == testedPages[index];
     inputSelfTestPageToLauncher &= opened;
     if (!opened && !strcmp(inputSelfTestFailure, "NONE")) {
-      inputSelfTestFailure = "PAGE_TO_LAUNCHER";
+      inputSelfTestFailure = "LONG_PAGE_TO_LAUNCHER";
       inputSelfTestFailurePage = pageName(testedPages[index]);
     }
-    if (index == 0) {
-      inputSelfTestSecondPressGrace = opened && shortPressCount == shortsBefore;
-    }
 
-    selfTestDoubleClick();
+    selfTestLongPress();
     const bool closed = !menuOpen && currentPage == testedPages[index];
     inputSelfTestLauncherToPage &= closed;
     if (!closed && !strcmp(inputSelfTestFailure, "NONE")) {
-      inputSelfTestFailure = "LAUNCHER_TO_PAGE";
+      inputSelfTestFailure = "LONG_LAUNCHER_TO_PAGE";
       inputSelfTestFailurePage = pageName(testedPages[index]);
     }
     if (opened && closed) ++inputSelfTestPageRoundTrips;
+  }
+
+  currentPage = Page::About;
+  menuOpen = false;
+  resetSelfTestClickState();
+  selfTestDoubleClick(true);
+  const bool doubleOpened = menuOpen && currentPage == Page::About;
+  inputSelfTestSecondPressGrace = doubleOpened && shortPressCount == shortsBefore;
+  selfTestDoubleClick();
+  const bool doubleClosed = !menuOpen && currentPage == Page::About;
+  inputSelfTestDoubleClickFallback = doubleOpened && doubleClosed;
+  if (!inputSelfTestDoubleClickFallback && !strcmp(inputSelfTestFailure, "NONE")) {
+    inputSelfTestFailure = "DOUBLE_CLICK_FALLBACK";
+    inputSelfTestFailurePage = "ABOUT";
   }
 
   constexpr Page backPages[] = {
@@ -1942,18 +1968,9 @@ bool runInputSelfTest(uint32_t &releaseDelta, uint32_t &shortDelta,
     }
   }
 
-  currentPage = Page::About;
-  menuOpen = false;
-  resetSelfTestClickState();
-  selfTestButtonLevel(true);
-  serviceButtonFor(kButtonLongPressMs + 30);
-  selfTestButtonLevel(false);
-  serviceButtonFor(20);
-  inputSelfTestLongPress = menuOpen && currentPage == Page::About;
-  if (!inputSelfTestLongPress && !strcmp(inputSelfTestFailure, "NONE")) {
-    inputSelfTestFailure = "LONG_PRESS";
-    inputSelfTestFailurePage = "ABOUT";
-  }
+  inputSelfTestLongPressBack =
+      inputSelfTestPageToLauncher && inputSelfTestLauncherToPage &&
+      inputSelfTestPageRoundTrips == expectedRoundTrips;
 
   releaseDelta = buttonReleaseCount - releasesBefore;
   shortDelta = shortPressCount - shortsBefore;
@@ -1961,10 +1978,10 @@ bool runInputSelfTest(uint32_t &releaseDelta, uint32_t &shortDelta,
   longDelta = longPressCount - longsBefore;
   latchDelta = secondClickLatchCount - latchesBefore;
   const bool countersPassed =
-      releaseDelta == expectedRoundTrips * 4 + expectedBackActions &&
+      releaseDelta == 4 + expectedBackActions &&
       shortDelta == expectedBackActions &&
-      doubleDelta == expectedRoundTrips * 2 && longDelta == 1 &&
-      latchDelta == expectedRoundTrips * 2;
+      doubleDelta == 2 && longDelta == expectedRoundTrips * 2 &&
+      latchDelta == 2;
   const bool gpioHigh = digitalRead(kEncoderButton) == HIGH;
   uint32_t edgeOverflowsAfter = 0;
   portENTER_CRITICAL(&buttonMux);
@@ -1973,7 +1990,8 @@ bool runInputSelfTest(uint32_t &releaseDelta, uint32_t &shortDelta,
   inputSelfTestQueueHealthy = edgeOverflowsAfter == edgeOverflowsBefore;
   inputSelfTestNavigationPassed =
       inputSelfTestPageToLauncher && inputSelfTestLauncherToPage &&
-      inputSelfTestNestedBack && inputSelfTestLongPress &&
+      inputSelfTestNestedBack && inputSelfTestLongPressBack &&
+      inputSelfTestDoubleClickFallback &&
       inputSelfTestSecondPressGrace && inputSelfTestQueuedPulse &&
       inputSelfTestQueueHealthy &&
       inputSelfTestPageRoundTrips == expectedRoundTrips &&
@@ -2408,6 +2426,7 @@ void sendState() {
   input["shortPresses"] = shortPressCount;
   input["doubleClicks"] = doubleClickCount;
   input["longPresses"] = longPressCount;
+  input["longPressThresholdMs"] = kButtonLongPressMs;
   input["doubleClickWindowMs"] = kDoubleClickMs;
   input["secondPressLatched"] = secondClickInProgress;
   input["secondPressLatches"] = secondClickLatchCount;
@@ -2432,7 +2451,7 @@ void sendState() {
   persistence["lastMask"] = lastPersistedSettings;
   persistence["pendingMask"] = dirtySettings;
   JsonObject selfTest = document.createNestedObject("selfTest");
-  selfTest["schema"] = 3;
+  selfTest["schema"] = 4;
   selfTest["inputRuns"] = inputSelfTestRuns;
   selfTest["inputPassed"] = inputSelfTestPassed;
   selfTest["inputLastAtMs"] = inputSelfTestAt;
@@ -2440,7 +2459,8 @@ void sendState() {
   selfTest["pageToLauncher"] = inputSelfTestPageToLauncher;
   selfTest["launcherToPage"] = inputSelfTestLauncherToPage;
   selfTest["nestedBack"] = inputSelfTestNestedBack;
-  selfTest["longPressMenu"] = inputSelfTestLongPress;
+  selfTest["longPressBack"] = inputSelfTestLongPressBack;
+  selfTest["doubleClickFallback"] = inputSelfTestDoubleClickFallback;
   selfTest["secondPressGrace"] = inputSelfTestSecondPressGrace;
   selfTest["queuedPulse"] = inputSelfTestQueuedPulse;
   selfTest["edgeQueueHealthy"] = inputSelfTestQueueHealthy;
@@ -2594,7 +2614,7 @@ void remoteSelfTest() {
 
   StaticJsonDocument<768> result;
   result["pass"] = inputSelfTestPassed;
-  result["schema"] = 3;
+  result["schema"] = 4;
   result["capture"] = "edge-queued-interrupt";
   result["buttonPin"] = kEncoderButton;
   result["releaseDelta"] = releaseDelta;
@@ -2606,7 +2626,8 @@ void remoteSelfTest() {
   result["pageToLauncher"] = inputSelfTestPageToLauncher;
   result["launcherToPage"] = inputSelfTestLauncherToPage;
   result["nestedBack"] = inputSelfTestNestedBack;
-  result["longPressMenu"] = inputSelfTestLongPress;
+  result["longPressBack"] = inputSelfTestLongPressBack;
+  result["doubleClickFallback"] = inputSelfTestDoubleClickFallback;
   result["secondPressGrace"] = inputSelfTestSecondPressGrace;
   result["queuedPulse"] = inputSelfTestQueuedPulse;
   result["edgeQueueHealthy"] = inputSelfTestQueueHealthy;

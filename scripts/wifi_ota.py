@@ -157,23 +157,24 @@ def run_device_self_test(address: str, password: str) -> None:
         method="POST",
         headers={"Authorization": f"Basic {token}", "Cache-Control": "no-store"},
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=35) as response:
         result = json.loads(response.read())
         if (
             response.status != 200
             or not isinstance(result, dict)
             or result.get("pass") is not True
-            or result.get("schema") != 3
-            or result.get("releaseDelta") != 40
+            or result.get("schema") != 4
+            or result.get("releaseDelta") != 8
             or result.get("shortPressDelta") != 4
-            or result.get("doubleClickDelta") != 18
-            or result.get("longPressDelta") != 1
-            or result.get("secondPressLatchDelta") != 18
+            or result.get("doubleClickDelta") != 2
+            or result.get("longPressDelta") != 18
+            or result.get("secondPressLatchDelta") != 2
             or result.get("navigationPassed") is not True
             or result.get("pageToLauncher") is not True
             or result.get("launcherToPage") is not True
             or result.get("nestedBack") is not True
-            or result.get("longPressMenu") is not True
+            or result.get("longPressBack") is not True
+            or result.get("doubleClickFallback") is not True
             or result.get("secondPressGrace") is not True
             or result.get("queuedPulse") is not True
             or result.get("edgeQueueHealthy") is not True
@@ -190,8 +191,8 @@ def run_device_self_test(address: str, password: str) -> None:
             )
     print(
         "on-device GPIO5 gesture/navigation self-test passed: "
-        "9 page/launcher round trips, 4 Back rows, queued pulse, long press, "
-        "second-press grace",
+        "9 long-press page/launcher round trips, 4 Back rows, queued pulse, "
+        "double-click fallback, second-press grace",
         flush=True,
     )
 
