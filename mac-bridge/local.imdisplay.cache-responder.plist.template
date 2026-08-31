@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.imdisplay.cache-responder</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-I</string>
+    <string>-S</string>
+    <string>__RESPONDER_PATH__</string>
+    <string>--expected-self-sha</string>
+    <string>__RESPONDER_SHA256__</string>
+    <string>--cache</string>
+    <string>__CACHE_PATH__</string>
+    <string>--key-file</string>
+    <string>__KEY_PATH__</string>
+    <string>--host-name</string>
+    <string>__HOST_NAME__</string>
+    <string>--listen-address</string>
+    <string>__LISTEN_ADDRESS__</string>
+    <string>--inherited-fd</string>
+    <string>0</string>
+    <string>--max-cache-age</string>
+    <string>150</string>
+  </array>
+  <key>Sockets</key>
+  <dict>
+    <key>QuotaHTTP</key>
+    <dict>
+      <key>SockFamily</key>
+      <string>IPv4</string>
+      <key>SockType</key>
+      <string>stream</string>
+      <key>SockProtocol</key>
+      <string>TCP</string>
+      <key>SockNodeName</key>
+      <string>__LISTEN_ADDRESS__</string>
+      <key>SockServiceName</key>
+      <integer>__PORT__</integer>
+    </dict>
+  </dict>
+  <key>inetdCompatibility</key>
+  <dict>
+    <key>Wait</key>
+    <true/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>HardResourceLimits</key>
+  <dict>
+    <key>Core</key>
+    <integer>0</integer>
+    <key>CPU</key>
+    <integer>5</integer>
+    <key>NumberOfFiles</key>
+    <integer>32</integer>
+  </dict>
+</dict>
+</plist>

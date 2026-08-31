@@ -1,0 +1,32 @@
+.DS_Store
+.platformio/
+.venv/
+.codex/
+.agents/
+**/.pio/
+**/__pycache__/
+*.py[cod]
+
+# Local repository contracts are intentionally not part of the public tree
+AGENTS.md
+SPEC.md
+
+# Device-specific/private evidence and credentials
+xsure-backup/
+.env
+.env.*
+*credential*.json
+*provisioning*.json
+*lan-state*.json
+**/read-only-key-*
+
+# Generated firmware artifacts
+firmware/releases/
+*.bin
+*.elf
+*.map
+
+# Local runtime state
+CHECKPOINT.md
+*.log
+*.pid
