@@ -16,6 +16,7 @@
 #include "budget_pull_client.h"
 #include "font5x7.h"
 #include "rgb_pixels.h"
+#include "rotary_gesture.h"
 #include "sound_engine.h"
 
 namespace {
@@ -39,6 +40,8 @@ constexpr int kEncoderEdgesPerDetent = 2;
 constexpr uint32_t kButtonDebounceMs = 8;
 constexpr uint32_t kButtonLongPressMs = 800;
 constexpr uint32_t kDoubleClickMs = 550;
+constexpr uint32_t kRotaryGestureWindowMs = 550;
+constexpr uint8_t kEncoderDetentQueueCapacity = 32;
 constexpr uint8_t kButtonEdgeQueueCapacity = 32;
 constexpr uint32_t kButtonEncoderGuardMs = 40;
 constexpr uint32_t kMenuDwellSelectMs = 1500;
@@ -515,7 +518,15 @@ uint32_t menuPartialRenderCount = 0;
 portMUX_TYPE encoderMux = portMUX_INITIALIZER_UNLOCKED;
 volatile uint8_t encoderPreviousRaw = 0;
 volatile int16_t encoderAccumulatorRaw = 0;
-volatile int16_t pendingEncoderDetents = 0;
+struct EncoderDetent {
+  uint32_t atMs;
+  int8_t direction;
+};
+volatile EncoderDetent encoderDetentQueue[kEncoderDetentQueueCapacity];
+volatile uint8_t encoderDetentHead = 0;
+volatile uint8_t encoderDetentTail = 0;
+volatile uint32_t encoderRawDetentCount = 0;
+volatile uint32_t encoderDetentOverflowCount = 0;
 struct ButtonEdge {
   uint32_t atMs;
   bool down;
@@ -530,6 +541,7 @@ volatile uint32_t buttonRawRiseCount = 0;
 volatile uint32_t buttonEdgeOverflowCount = 0;
 volatile uint32_t lastButtonRawEdgeAt = 0;
 ButtonDebouncer buttonDebouncer(kButtonDebounceMs, kButtonLongPressMs);
+RotaryGestureDetector rotaryGesture(kRotaryGestureWindowMs);
 bool buttonLongHandled = false;
 uint32_t buttonPressedAt = 0;
 uint32_t lastButtonPressDurationMs = 0;
@@ -574,6 +586,8 @@ bool lastNavigationFromMenu = false;
 bool lastNavigationToMenu = false;
 uint32_t remoteInputCount = 0;
 uint32_t dwellSelectionCount = 0;
+uint32_t rotaryForwardGestureCount = 0;
+uint32_t rotaryBackGestureCount = 0;
 uint32_t inputSelfTestRuns = 0;
 uint32_t inputSelfTestAt = 0;
 bool inputSelfTestPassed = false;
@@ -733,6 +747,7 @@ enum class InputSource : uint8_t {
   Physical,
   Remote,
   Dwell,
+  RotaryGesture,
 };
 
 void IRAM_ATTR captureEncoderEdge() {
@@ -743,12 +758,25 @@ void IRAM_ATTR captureEncoderEdge() {
   encoderAccumulatorRaw +=
       kEncoderTransitions[(encoderPreviousRaw << 2) | current];
   encoderPreviousRaw = current;
+  int8_t direction = 0;
   if (encoderAccumulatorRaw >= kEncoderEdgesPerDetent) {
     encoderAccumulatorRaw -= kEncoderEdgesPerDetent;
-    if (pendingEncoderDetents < INT16_MAX) ++pendingEncoderDetents;
+    direction = 1;
   } else if (encoderAccumulatorRaw <= -kEncoderEdgesPerDetent) {
     encoderAccumulatorRaw += kEncoderEdgesPerDetent;
-    if (pendingEncoderDetents > INT16_MIN) --pendingEncoderDetents;
+    direction = -1;
+  }
+  if (direction) {
+    ++encoderRawDetentCount;
+    const uint8_t next =
+        (encoderDetentHead + 1U) % kEncoderDetentQueueCapacity;
+    if (next == encoderDetentTail) {
+      ++encoderDetentOverflowCount;
+    } else {
+      encoderDetentQueue[encoderDetentHead].atMs = millis();
+      encoderDetentQueue[encoderDetentHead].direction = direction;
+      encoderDetentHead = next;
+    }
   }
   portEXIT_CRITICAL_ISR(&encoderMux);
 }
@@ -1170,7 +1198,7 @@ void drawBackAction(int y, bool selected = true) {
   display.fillRect(16, y, 288, 32, selected ? kPanel : kBlack);
   if (selected) display.fillRect(16, y, 5, 32, kBlue);
   display.text(30, y + 9, "BACK TO LAUNCHER", selected ? kWhite : kMuted, 2);
-  rightAligned(292, y + 12, "CLICK", selected ? kWhite : kMuted, 1);
+  rightAligned(292, y + 12, "QUICK L-R", selected ? kWhite : kMuted, 1);
 }
 
 void drawSettingRow(int y, const char *label, const char *value, bool selected,
@@ -1256,7 +1284,7 @@ void renderOverview() {
   } else if (isStale()) {
     display.text(258, 176, "STALE", kAmber, 1);
   }
-  footer("CLICK MENU  HOLD BACK");
+  footer("QUICK R-L MENU  QUICK L-R BACK");
 }
 
 void renderWindows() {
@@ -1276,7 +1304,7 @@ void renderWindows() {
       display.text(18, y + 26, budget.windows[i].window, kMuted, 1);
     }
   }
-  footer("TURN SCROLL  HOLD BACK");
+  footer("TURN SCROLL  QUICK R-L MENU  QUICK L-R BACK");
 }
 
 void renderConnection() {
@@ -1301,7 +1329,7 @@ void renderConnection() {
                : (accessPointReady ? "192.168.4.1" : "OFFLINE"),
                kBlue, 2);
   display.text(202, 148, "LOGIN: XSURE", kMuted, 1);
-  footer("CLICK OR TURN MENU  HOLD BACK");
+  footer("TURN MENU  QUICK L-R BACK");
 }
 
 void renderTimerClock(bool includeStatus = true) {
@@ -1324,12 +1352,12 @@ void renderTimer() {
            static_cast<unsigned long>(workTimer.durationSeconds / 60));
   display.centered(132, duration, kWhite, 2);
   display.centered(183,
-                   workTimer.running ? "CLICK: PAUSE"
-                                     : "TURN: 5 MIN  CLICK: START",
+                   workTimer.running ? "QUICK RIGHT-LEFT: PAUSE"
+                                     : "TURN: 5 MIN  QUICK R-L: START",
                    kMuted, 1);
   footer(workTimer.running
-             ? "CLICK PAUSE  HOLD BACK"
-             : "TURN 5 MIN  CLICK START  HOLD BACK");
+             ? "QUICK R-L PAUSE  QUICK L-R BACK"
+             : "TURN 5 MIN  QUICK R-L START  QUICK L-R BACK");
 }
 
 void renderApplets() {
@@ -1346,7 +1374,8 @@ void renderApplets() {
                  selected ? kWhite : (installed[i] ? kGreen : kAmber), 2);
     if (selected) {
       display.text(24, y + 34,
-                   installed[i] ? "CLICK TO DISABLE" : "CLICK TO ENABLE",
+                   installed[i] ? "QUICK R-L TO DISABLE"
+                                : "QUICK R-L TO ENABLE",
                    kMuted, 1);
     }
   }
@@ -1356,7 +1385,7 @@ void renderApplets() {
   display.centered(160, active,
                    codexAppletInstalled || timerAppletInstalled ? kGreen : kAmber, 1);
   drawBackAction(174, appletIndex == 2);
-  footer("TURN SELECT  CLICK ACT  HOLD BACK");
+  footer("TURN SELECT  QUICK R-L ACT  QUICK L-R BACK");
 }
 
 void renderLeds() {
@@ -1369,7 +1398,7 @@ void renderLeds() {
   drawSettingRow(124, "EVENT GLOW", ledFeedbackEnabled ? "ON" : "OFF",
                  ledField == 2, ledFeedbackEnabled ? kGreen : kMuted);
   drawBackAction(174, ledField == 3);
-  footer("TURN CHANGE  CLICK NEXT  HOLD BACK");
+  footer("TURN CHANGE  QUICK R-L NEXT  QUICK L-R BACK");
 }
 
 void renderDisplay() {
@@ -1384,7 +1413,7 @@ void renderDisplay() {
   display.text(42, 160, "10 MIN", kMuted, 1);
   rightAligned(278, 160, "100 MAX", kMuted, 1);
   drawBackAction(174);
-  footer("TURN ADJUST  CLICK BACK  HOLD BACK");
+  footer("TURN ADJUST  QUICK L-R BACK");
 }
 
 void renderSounds() {
@@ -1397,7 +1426,7 @@ void renderSounds() {
   drawSettingRow(124, "TEST CUE", soundProfileIndex ? "PLAY" : "MUTED",
                  soundField == 2, soundProfileIndex ? kGreen : kMuted);
   drawBackAction(174, soundField == 3);
-  footer("TURN CHANGE  CLICK NEXT  HOLD BACK");
+  footer("TURN CHANGE  QUICK R-L NEXT  QUICK L-R BACK");
 }
 
 void renderAbout() {
@@ -1407,7 +1436,7 @@ void renderAbout() {
   display.text(50, 126, "FIRMWARE " CODEX_BUDGET_FIRMWARE_VERSION, kMuted, 1);
   display.text(50, 148, "ESP32-WROOM-32D", kMuted, 1);
   display.text(50, 170, "FACTORY RESTORE SAVED", kGreen, 1);
-  footer("CLICK MENU  HOLD BACK");
+  footer("QUICK R-L MENU  QUICK L-R BACK");
 }
 
 int menuFirstIndex(int selected, int count) {
@@ -1437,7 +1466,7 @@ void renderMenu() {
     const int index = first + row;
     renderMenuRow(entries[index], row, index == menuIndex);
   }
-  footer("TURN SELECT  CLICK OPEN  HOLD CLOSE");
+  footer("TURN SELECT  QUICK R-L OPEN  QUICK L-R CLOSE");
 }
 
 void render() {
@@ -1575,13 +1604,17 @@ void encoderMoved(int direction, InputSource source = InputSource::Physical) {
                 pageName(currentPage), menuOpen, menuIndex);
 }
 
+void longPress(InputSource source = InputSource::Physical);
+
 void shortPress(InputSource source = InputSource::Physical) {
   if (source == InputSource::Physical) {
     ++shortPressCount;
   } else if (source == InputSource::Remote) {
     ++remoteInputCount;
-  } else {
+  } else if (source == InputSource::Dwell) {
     ++dwellSelectionCount;
+  } else {
+    ++rotaryForwardGestureCount;
   }
   menuDwellArmed = false;
   if (menuOpen) {
@@ -1602,7 +1635,9 @@ void shortPress(InputSource source = InputSource::Physical) {
       requestBudgetPull();
     }
     playSound(SoundEngine::Cue::Confirm);
-    recordNavigation("MENU_SELECT", fromPage, fromMenu);
+    recordNavigation(source == InputSource::RotaryGesture ? "ROTARY_FORWARD"
+                                                          : "MENU_SELECT",
+                     fromPage, fromMenu);
   } else if (currentPage == Page::Timer) {
     workTimer.running ? pauseWorkTimer() : startWorkTimer();
   } else if (currentPage == Page::Applets) {
@@ -1633,52 +1668,87 @@ void shortPress(InputSource source = InputSource::Physical) {
       playSound(SoundEngine::Cue::Confirm);
     }
   } else {
-    openMenuFromInput("SHORT_MENU");
+    openMenuFromInput(source == InputSource::RotaryGesture ? "ROTARY_FORWARD"
+                                                           : "SHORT_MENU");
   }
   needsRender = true;
   Serial.printf("input button=short page=%s menu=%d index=%d\n",
                 pageName(currentPage), menuOpen, menuIndex);
 }
 
-void pollEncoder() {
-  int16_t detents = 0;
+void handleRotaryGestureEvent(RotaryGestureDetector::Event event) {
+  switch (event) {
+    case RotaryGestureDetector::Event::Clockwise:
+      encoderMoved(1);
+      break;
+    case RotaryGestureDetector::Event::CounterClockwise:
+      encoderMoved(-1);
+      break;
+    case RotaryGestureDetector::Event::Forward:
+      shortPress(InputSource::RotaryGesture);
+      Serial.println("input rotary=right-left-forward");
+      break;
+    case RotaryGestureDetector::Event::Back:
+      longPress(InputSource::RotaryGesture);
+      Serial.println("input rotary=left-right-back");
+      break;
+  }
+}
+
+bool popEncoderDetent(EncoderDetent &detent) {
+  bool available = false;
   portENTER_CRITICAL(&encoderMux);
-  detents = pendingEncoderDetents;
-  pendingEncoderDetents = 0;
+  if (encoderDetentTail != encoderDetentHead) {
+    detent.atMs = encoderDetentQueue[encoderDetentTail].atMs;
+    detent.direction = encoderDetentQueue[encoderDetentTail].direction;
+    encoderDetentTail =
+        (encoderDetentTail + 1U) % kEncoderDetentQueueCapacity;
+    available = true;
+  }
   portEXIT_CRITICAL(&encoderMux);
+  return available;
+}
+
+void pollEncoder() {
   uint32_t lastButtonEdgeAt = 0;
   portENTER_CRITICAL(&buttonMux);
   lastButtonEdgeAt = lastButtonRawEdgeAt;
   portEXIT_CRITICAL(&buttonMux);
-  if (detents &&
-      (buttonDebouncer.rawDown() || millis() - lastButtonEdgeAt <= kButtonEncoderGuardMs)) {
-    suppressedEncoderDetentCount += abs(detents);
-    detents = 0;
+  EncoderDetent detent{};
+  while (popEncoderDetent(detent)) {
+    const int32_t signedDistance =
+        static_cast<int32_t>(detent.atMs - lastButtonEdgeAt);
+    const uint32_t buttonEdgeDistance =
+        static_cast<uint32_t>(signedDistance < 0 ? -signedDistance : signedDistance);
+    if (buttonDebouncer.rawDown() || buttonEdgeDistance <= kButtonEncoderGuardMs) {
+      ++suppressedEncoderDetentCount;
+      continue;
+    }
+    if (singleClickPending) {
+      singleClickPending = false;
+      secondClickInProgress = false;
+      shortPress();
+    }
+    rotaryGesture.observe(detent.direction, detent.atMs,
+                          handleRotaryGestureEvent);
   }
-  if (detents && singleClickPending) {
-    singleClickPending = false;
-    secondClickInProgress = false;
-    shortPress();
-  }
-  while (detents > 0) {
-    encoderMoved(1);
-    --detents;
-  }
-  while (detents < 0) {
-    encoderMoved(-1);
-    ++detents;
-  }
+  rotaryGesture.advanceTo(millis(), handleRotaryGestureEvent);
 }
 
-void longPress(InputSource source = InputSource::Physical) {
+void longPress(InputSource source) {
   if (source == InputSource::Physical) {
     ++longPressCount;
   } else if (source == InputSource::Remote) {
     ++remoteInputCount;
+  } else if (source == InputSource::RotaryGesture) {
+    ++rotaryBackGestureCount;
   }
   menuDwellArmed = false;
-  toggleLauncherFromInput(source == InputSource::Remote ? "REMOTE_HOLD_BACK"
-                                                         : "LONG_PRESS_BACK");
+  const char *method = source == InputSource::Remote
+                           ? "REMOTE_HOLD_BACK"
+                           : (source == InputSource::RotaryGesture ? "ROTARY_BACK"
+                                                                   : "LONG_PRESS_BACK");
+  toggleLauncherFromInput(method);
   Serial.printf("input button=long-back page=%s menu=%d\n", pageName(currentPage),
                 menuOpen);
 }
@@ -2402,6 +2472,9 @@ void sendState() {
   uint32_t edgeOverflows = 0;
   uint32_t lastRawEdgeAt = 0;
   uint8_t queuedEdges = 0;
+  uint32_t rawEncoderDetents = 0;
+  uint32_t encoderDetentOverflows = 0;
+  uint8_t queuedEncoderDetents = 0;
   portENTER_CRITICAL(&buttonMux);
   rawEdges = buttonRawEdgeCount;
   rawFalls = buttonRawFallCount;
@@ -2411,7 +2484,15 @@ void sendState() {
   queuedEdges = (buttonEdgeHead + kButtonEdgeQueueCapacity - buttonEdgeTail) %
                 kButtonEdgeQueueCapacity;
   portEXIT_CRITICAL(&buttonMux);
+  portENTER_CRITICAL(&encoderMux);
+  rawEncoderDetents = encoderRawDetentCount;
+  encoderDetentOverflows = encoderDetentOverflowCount;
+  queuedEncoderDetents =
+      (encoderDetentHead + kEncoderDetentQueueCapacity - encoderDetentTail) %
+      kEncoderDetentQueueCapacity;
+  portEXIT_CRITICAL(&encoderMux);
   input["capture"] = "edge-queued-interrupt";
+  input["encoderCapture"] = "ordered-detent-queue";
   input["buttonPin"] = kEncoderButton;
   input["rawEdges"] = rawEdges;
   input["rawFalls"] = rawFalls;
@@ -2422,6 +2503,9 @@ void sendState() {
   input["lastPressDurationMs"] = lastButtonPressDurationMs;
   input["suppressedEncoderDetents"] = suppressedEncoderDetentCount;
   input["encoderEvents"] = encoderEventCount;
+  input["encoderRawDetents"] = rawEncoderDetents;
+  input["encoderDetentQueueDepth"] = queuedEncoderDetents;
+  input["encoderDetentQueueOverflows"] = encoderDetentOverflows;
   input["buttonReleases"] = buttonReleaseCount;
   input["shortPresses"] = shortPressCount;
   input["doubleClicks"] = doubleClickCount;
@@ -2437,11 +2521,20 @@ void sendState() {
   input["lastNavigationToMenu"] = lastNavigationToMenu;
   input["remoteEvents"] = remoteInputCount;
   input["dwellSelections"] = dwellSelectionCount;
+  input["rotaryForwardGestures"] = rotaryForwardGestureCount;
+  input["rotaryBackGestures"] = rotaryBackGestureCount;
+  input["rotaryGestureWindowMs"] = kRotaryGestureWindowMs;
+  input["rotaryPendingDetents"] = rotaryGesture.pendingDetents();
+  input["rotaryPassThrough"] = rotaryGesture.passThrough();
   input["lastRemoteAction"] = lastRemoteAction;
   input["lastDirection"] = lastEncoderDirection;
   input["encoderA"] = digitalRead(kEncoderA);
   input["encoderB"] = digitalRead(kEncoderB);
   input["buttonPressed"] = digitalRead(kEncoderButton) == LOW;
+  // Read-only raw levels let authenticated diagnostics compare released and
+  // held hardware without reconfiguring, driving, or interrupting any pin.
+  input["gpioLevels0To31"] = static_cast<uint32_t>(GPIO.in);
+  input["gpioLevels32To39"] = static_cast<uint32_t>(GPIO.in1.val & 0xffU);
   input["settingsPendingMask"] = dirtySettings;
   JsonObject persistence = document.createNestedObject("persistence");
   persistence["commitDelayMs"] = kSettingsCommitDelayMs;

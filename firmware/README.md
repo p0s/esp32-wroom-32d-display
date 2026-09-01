@@ -97,13 +97,24 @@ Single-click selects or acts after a 550 ms double-click window. Holding for
 it is already open. A second press
 that begins inside that window is latched until release, so its first click can
 never activate a launcher item while the second click is still held.
-Double-click retains the same behavior as a compatibility fallback. Turning
-from Overview, Connection, or About and pausing 1.5 seconds remains
-the no-button fallback. The authenticated web UI provides exact virtual turn,
+Double-click retains the same behavior as a compatibility fallback. A quick
+right-then-left one-detent wiggle within the 550 ms gesture window performs the
+same forward select/action as a click; left-then-right toggles Back/the launcher. Because each gesture returns
+the knob to its starting position, every same-direction turn—slow or fast—stays
+ordinary movement or adjustment. This provides complete knob-only control when
+an encoder push switch is absent or electrically faulty. The physical click and
+hold paths remain enabled for working hardware. Forward opens or selects in the
+launcher, starts/pauses the timer, and advances or activates the highlighted
+settings action; Back always toggles the launcher from any screen. The
+authenticated web UI provides exact virtual turn,
 press, back, and hold controls plus logical screen readback. Encoder and GPIO5
-button edges are interrupt-latched. GPIO5 keeps a bounded timestamped edge
+button edges are interrupt-latched. Encoder detents retain timestamped order in
+a bounded queue, so a fast reversal cannot cancel during a screen redraw. GPIO5 keeps a bounded timestamped edge
 queue, so a complete click remains visible even when a full-frame transfer
 temporarily blocks the main loop; the same 8 ms debounce filters contact bounce.
+Authenticated `/api/state` also reports raw GPIO input levels for pins 0-31 and
+32-39. Comparing released and held snapshots can identify a hardware-revision
+pin change or an open switch without reconfiguring or driving GPIOs.
 `/api/self-test?input=1` drives the electrical GPIO5 path and must prove a
 complete queued click with no polling during the gesture, long-press Back round
 trips across all nine pages, launcher close, all four visible one-click Back
