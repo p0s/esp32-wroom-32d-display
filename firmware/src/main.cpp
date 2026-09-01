@@ -111,6 +111,17 @@ constexpr SoundProfile kSoundProfiles[] = {
 };
 constexpr size_t kSoundProfileCount = sizeof(kSoundProfiles) / sizeof(kSoundProfiles[0]);
 
+const char *soundCueName(uint8_t cue) {
+  switch (static_cast<SoundEngine::Cue>(cue)) {
+    case SoundEngine::Cue::Confirm: return "CONFIRM";
+    case SoundEngine::Cue::Start: return "START";
+    case SoundEngine::Cue::Pause: return "PAUSE";
+    case SoundEngine::Cue::Complete: return "COMPLETE";
+    case SoundEngine::Cue::Preview: return "PREVIEW";
+  }
+  return "NONE";
+}
+
 class St7789 {
  public:
   void begin() {
@@ -2461,6 +2472,13 @@ void sendState() {
   sound["engineReady"] = soundTaskReady;
   sound["driverReady"] = soundEngine.driverReady();
   sound["lastError"] = soundEngine.lastError();
+  sound["active"] = soundEngine.active();
+  sound["queued"] = soundEngine.queuedCount();
+  sound["rejected"] = soundEngine.rejectedCount();
+  sound["played"] = soundEngine.playedCount();
+  sound["bytesWritten"] = soundEngine.bytesWritten();
+  sound["writeFailures"] = soundEngine.writeFailures();
+  sound["lastCue"] = soundCueName(soundEngine.lastCue());
   JsonObject timerState = document.createNestedObject("timer");
   timerState["running"] = workTimer.running;
   timerState["remainingSeconds"] = timerRemainingSeconds();

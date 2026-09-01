@@ -563,28 +563,38 @@ def verify_all(credential_path: Path, address_path: Path) -> None:
     )
     print("verified full native raster and display dimming restore", flush=True)
 
+    sound_before = read_state(base_url, credential["password"])["sound"]
     post_query(
         base_url,
         credential["password"],
         "/api/sound",
-        {"profile": "soft", "volume": 20, "test": 1},
+        {"profile": "soft", "volume": 100, "test": 1},
     )
-    sound_deadline = time.monotonic() + 3
+    sound_deadline = time.monotonic() + 5
     changed_sound = {}
     while time.monotonic() < sound_deadline:
         changed_sound = read_state(base_url, credential["password"])["sound"]
-        if changed_sound.get("driverReady") is True:
+        if changed_sound.get("played", 0) > sound_before.get("played", 0):
             break
         time.sleep(0.1)
-    if changed_sound.get("driverReady") is not True or changed_sound.get("lastError") != 0:
-        raise RuntimeError("factory-proven PDM sound driver did not become ready")
+    if (
+        changed_sound.get("driverReady") is not True
+        or changed_sound.get("lastError") != 0
+        or changed_sound.get("played", 0) <= sound_before.get("played", 0)
+        or changed_sound.get("bytesWritten", 0)
+        <= sound_before.get("bytesWritten", 0)
+        or changed_sound.get("writeFailures", 0)
+        != sound_before.get("writeFailures", 0)
+        or changed_sound.get("lastCue") != "PREVIEW"
+    ):
+        raise RuntimeError("factory-format PDM test cue was not completely written")
     post_query(
         base_url,
         credential["password"],
         "/api/sound",
         {"profile": original_sound["profile"], "volume": original_sound["volume"]},
     )
-    print("verified sound driver/test cue request and restore", flush=True)
+    print("verified complete factory-format PDM test-cue write and restore", flush=True)
 
     post_query(
         base_url,

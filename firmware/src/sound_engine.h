@@ -6,9 +6,10 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
-// The factory firmware configures I2S0 in internal PDM mode (mode 2 in
-// ESP8266Audio) with eight DMA buffers. This engine keeps that proven hardware
-// path and limits generated tones to a small fraction of full scale.
+// The factory firmware constructs ESP8266Audio as
+// AudioOutputI2S(0, INTERNAL_PDM, 8, APLL_DISABLE). It installs I2S0 at the
+// library's 44.1 kHz default, then changes the running driver to the WAV's
+// 16 kHz rate. Preserve that exact initialization sequence and sample format.
 class SoundEngine {
  public:
   enum class Cue : uint8_t { Confirm, Start, Pause, Complete, Preview };
@@ -28,12 +29,24 @@ class SoundEngine {
   bool play(Cue cue, uint8_t volumePercent) {
     if (!events_ || volumePercent == 0) return false;
     const Event event{cue, min<uint8_t>(volumePercent, 100)};
-    return xQueueSendToBack(events_, &event, 0) == pdTRUE;
+    if (xQueueSendToBack(events_, &event, 0) != pdTRUE) {
+      ++rejectedCount_;
+      return false;
+    }
+    ++queuedCount_;
+    return true;
   }
 
   bool ready() const { return events_ != nullptr; }
   bool driverReady() const { return driverReady_; }
   esp_err_t lastError() const { return lastError_; }
+  bool active() const { return active_; }
+  uint32_t queuedCount() const { return queuedCount_; }
+  uint32_t rejectedCount() const { return rejectedCount_; }
+  uint32_t playedCount() const { return playedCount_; }
+  uint32_t bytesWritten() const { return bytesWritten_; }
+  uint32_t writeFailures() const { return writeFailureCount_; }
+  uint8_t lastCue() const { return lastCue_; }
 
  private:
   struct Event {
@@ -52,10 +65,19 @@ class SoundEngine {
     Event event{};
     while (true) {
       if (xQueueReceive(events_, &event, portMAX_DELAY) != pdTRUE) continue;
-      if (!ensureDriver()) continue;
+      active_ = true;
+      if (!ensureDriver()) {
+        active_ = false;
+        continue;
+      }
+      const uint32_t failuresBefore = writeFailureCount_;
       playCue(event);
       writeSilence(28);
-      i2s_zero_dma_buffer(I2S_NUM_0);
+      if (writeFailureCount_ == failuresBefore) {
+        lastCue_ = static_cast<uint8_t>(event.cue);
+        ++playedCount_;
+      }
+      active_ = false;
     }
   }
 
@@ -63,10 +85,10 @@ class SoundEngine {
     if (driverReady_) return true;
     i2s_config_t config{};
     config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_PDM);
-    config.sample_rate = kSampleRate;
+    config.sample_rate = 44100;
     config.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
-    config.channel_format = I2S_CHANNEL_FMT_ALL_RIGHT;
-    config.communication_format = I2S_COMM_FORMAT_STAND_MSB;
+    config.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
+    config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
     config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
     config.dma_buf_count = 8;
     config.dma_buf_len = 128;
@@ -78,6 +100,7 @@ class SoundEngine {
     if (lastError_ != ESP_OK) return false;
     lastError_ = i2s_set_pin(I2S_NUM_0, nullptr);
     if (lastError_ == ESP_OK) lastError_ = i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);
+    if (lastError_ == ESP_OK) lastError_ = i2s_set_sample_rates(I2S_NUM_0, kSampleRate);
     if (lastError_ != ESP_OK) {
       i2s_driver_uninstall(I2S_NUM_0);
       return false;
@@ -112,11 +135,11 @@ class SoundEngine {
         tone(784, 170, event.volume);
         break;
       case Cue::Preview:
-        tone(587, 75, event.volume);
-        writeSilence(30);
-        tone(740, 85, event.volume);
-        writeSilence(30);
-        tone(880, 120, event.volume);
+        tone(587, 180, event.volume);
+        writeSilence(60);
+        tone(740, 200, event.volume);
+        writeSilence(60);
+        tone(880, 260, event.volume);
         break;
     }
   }
@@ -125,7 +148,9 @@ class SoundEngine {
     const uint32_t frameCount = static_cast<uint32_t>(durationMs) * kSampleRate / 1000;
     const uint32_t phaseStep =
         static_cast<uint32_t>((static_cast<uint64_t>(frequency) << 32) / kSampleRate);
-    const int32_t amplitude = 300 + static_cast<int32_t>(volumePercent) * 35;
+    // Factory cues use nearly the full signed 16-bit range. Preserve headroom
+    // while making 100% genuinely audible and keeping low saved levels gentle.
+    const int32_t amplitude = static_cast<int32_t>(volumePercent) * 300;
     const uint32_t envelopeFrames = min<uint32_t>(frameCount / 3, kSampleRate / 100);
     uint32_t phase = 0;
     uint32_t produced = 0;
@@ -169,11 +194,23 @@ class SoundEngine {
     size_t written = 0;
     lastError_ = i2s_write(I2S_NUM_0, data, bytes, &written, portMAX_DELAY);
     if (lastError_ == ESP_OK && written != bytes) lastError_ = ESP_FAIL;
-    return lastError_ == ESP_OK;
+    if (lastError_ != ESP_OK) {
+      ++writeFailureCount_;
+      return false;
+    }
+    bytesWritten_ += written;
+    return true;
   }
 
   QueueHandle_t events_ = nullptr;
   TaskHandle_t task_ = nullptr;
   volatile bool driverReady_ = false;
+  volatile bool active_ = false;
   volatile esp_err_t lastError_ = ESP_OK;
+  volatile uint32_t queuedCount_ = 0;
+  volatile uint32_t rejectedCount_ = 0;
+  volatile uint32_t playedCount_ = 0;
+  volatile uint32_t bytesWritten_ = 0;
+  volatile uint32_t writeFailureCount_ = 0;
+  volatile uint8_t lastCue_ = 0xff;
 };

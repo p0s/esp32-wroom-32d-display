@@ -125,7 +125,14 @@ setting changes are persisted in one coalesced
 NVS session with only the changed legacy-compatible keys written. Authenticated
 state reports the pending mask, session count, key-write attempts, and failures
 for live verification. Display backlight is adjustable from 10-100%; sound offers
-Mute, Minimal, and Soft profiles; LEDs offer presets,
+Mute, Minimal, and Soft profiles with 0-100% volume and a clear three-note test
+cue. The sound path reproduces the factory firmware's ESP8266Audio PDM setup:
+I2S0, internal PDM mode, eight 128-sample DMA buffers, right/left signed PCM,
+standard I2S framing, and the factory 44.1 kHz install followed by the cue's
+16 kHz rate. Authenticated state reports queued
+and completed cues, bytes written, queue rejections, and write failures. Those
+counters prove the firmware/DMA path; audible output still requires a
+human or microphone check of the physical speaker. LEDs offer presets,
 brightness, and optional event glows (default Warm/20%). The same settings are
 available in the authenticated local web UI and persist across reboot.
 
