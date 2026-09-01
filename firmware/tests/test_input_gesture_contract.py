@@ -36,16 +36,34 @@ class InputGestureContractTests(unittest.TestCase):
         self.assertNotIn("longPress(", function_body("encoderMoved"))
         self.assertIn("openMenuFromInput", function_body("shortPress"))
 
-    def test_renderer_and_self_test_publish_the_new_contract(self) -> None:
+    def test_renderer_and_self_test_publish_the_dual_input_contract(self) -> None:
         self.assertNotIn("DOUBLE BACK", MAIN)
         self.assertNotIn("HOLD MENU", MAIN)
         self.assertIn(
-            'footer("TURN SELECT  QUICK R-L OPEN  QUICK L-R CLOSE")', MAIN
+            'footer("TURN SELECT PUSH/R-L OPEN HOLD/L-R CLOSE")', MAIN
         )
         self.assertIn('input["longPressThresholdMs"] = kButtonLongPressMs;', MAIN)
         self.assertIn('selfTest["schema"] = 4;', MAIN)
         self.assertIn('selfTest["longPressBack"]', MAIN)
         self.assertIn('selfTest["doubleClickFallback"]', MAIN)
+
+    def test_working_push_button_remains_first_class(self) -> None:
+        release = function_body("handlePhysicalClickRelease")
+        self.assertIn("shortPress();", release)
+        self.assertIn("navigateBack();", release)
+
+        debounced = function_body("handleDebouncedButtonEvent")
+        self.assertIn("handlePhysicalPress(atMs);", debounced)
+        self.assertIn("handlePhysicalClickRelease(atMs);", debounced)
+        self.assertIn("longPress();", debounced)
+
+        rendered_ui = MAIN.split("void renderOverview()", 1)[1].split(
+            "void encoderMoved(", 1
+        )[0]
+        self.assertIn("PUSH", rendered_ui)
+        self.assertIn("HOLD", rendered_ui)
+        self.assertIn("R-L", rendered_ui)
+        self.assertIn("L-R", rendered_ui)
 
     def test_authenticated_state_exposes_side_effect_free_gpio_levels(self) -> None:
         self.assertIn(
@@ -99,21 +117,24 @@ class InputGestureContractTests(unittest.TestCase):
         self.assertIn("toggleLauncherFromInput(method)", back)
         self.assertIn('"ROTARY_BACK"', back)
 
-        rendered_ui = MAIN.split("void renderOverview()", 1)[1].split(
-            "void encoderMoved(", 1
-        )[0]
-        self.assertNotIn('"CLICK"', rendered_ui)
-        self.assertIn('rightAligned(292, y + 12, "QUICK L-R"', MAIN)
+        self.assertIn('rightAligned(292, y + 12, "PUSH / R-L"', MAIN)
         for footer in (
-            "QUICK R-L MENU  QUICK L-R BACK",
-            "TURN SCROLL  QUICK R-L MENU  QUICK L-R BACK",
-            "QUICK R-L PAUSE  QUICK L-R BACK",
-            "TURN SELECT  QUICK R-L ACT  QUICK L-R BACK",
-            "TURN CHANGE  QUICK R-L NEXT  QUICK L-R BACK",
-            "TURN ADJUST  QUICK L-R BACK",
-            "TURN SELECT  QUICK R-L OPEN  QUICK L-R CLOSE",
+            "PUSH/R-L MENU  HOLD/L-R BACK",
+            "TURN SCROLL  PUSH/R-L MENU  HOLD/L-R BACK",
+            "PUSH/R-L PAUSE  HOLD/L-R BACK",
+            "TURN SELECT PUSH/R-L ACT HOLD/L-R BACK",
+            "TURN CHANGE PUSH/R-L NEXT HOLD/L-R BACK",
+            "TURN ADJUST PUSH/R-L/HOLD/L-R BACK",
+            "TURN SELECT PUSH/R-L OPEN HOLD/L-R CLOSE",
         ):
             self.assertIn(f'"{footer}"', MAIN)
+
+        footer_widths = [
+            len(hint) * 6 - 1
+            for hint in re.findall(r'footer\("([^"]+)"\)', MAIN)
+        ]
+        self.assertTrue(footer_widths)
+        self.assertLessEqual(max(footer_widths), 288)
 
 
 if __name__ == "__main__":

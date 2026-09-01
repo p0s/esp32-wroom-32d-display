@@ -9,9 +9,10 @@ Overview fills the usable screen with 107-pixel quota digits, a wide progress
 bar, reset strip, and navigation footer. Applet and settings screens use
 full-width focus rows with stable typography instead of small side-by-side
 cards. Applets, LED settings, sound settings, and display settings expose a
-visible one-click Back action. Holding for 800 ms is the reliable global Back
-gesture on every page and closes the launcher; double-click remains a
-compatibility fallback.
+visible one-click Back action. The on-device hints show the working push-button
+controls first and their rotation-only equivalents alongside them. Holding for
+800 ms is the reliable global Back gesture on every page and closes the
+launcher; double-click remains a compatibility fallback.
 
 Full pages are composed in the same 4-bit mirror used by authenticated screen
 capture, then transferred to the LCD in one complete raster transaction. Menu
@@ -97,13 +98,14 @@ Single-click selects or acts after a 550 ms double-click window. Holding for
 it is already open. A second press
 that begins inside that window is latched until release, so its first click can
 never activate a launcher item while the second click is still held.
-Double-click retains the same behavior as a compatibility fallback. A quick
+Double-click retains the same Back behavior as a compatibility fallback. A quick
 right-then-left one-detent wiggle within the 550 ms gesture window performs the
 same forward select/action as a click; left-then-right toggles Back/the launcher. Because each gesture returns
 the knob to its starting position, every same-direction turn—slow or fast—stays
 ordinary movement or adjustment. This provides complete knob-only control when
-an encoder push switch is absent or electrically faulty. The physical click and
-hold paths remain enabled for working hardware. Forward opens or selects in the
+an encoder push switch is absent or electrically faulty. The physical push
+button remains first-class on working hardware: click performs Forward, hold
+performs Back, and double-click also performs Back. Forward opens or selects in the
 launcher, starts/pauses the timer, and advances or activates the highlighted
 settings action; Back always toggles the launcher from any screen. The
 authenticated web UI provides exact virtual turn,

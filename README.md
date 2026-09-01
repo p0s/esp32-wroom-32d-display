@@ -5,6 +5,10 @@ the original ESP32-WROOM-32D hardware into a 320x240 applet display with a Codex
 quota view, work timer, encoder navigation, LEDs, sound, authenticated LAN
 control, and verified Wi-Fi OTA updates.
 
+On boards with a working encoder push switch, push selects and hold goes back.
+A quick right-left or left-right turn provides the same actions when that switch
+is absent or faulty; the on-device hints show both control paths.
+
 Released under the [MIT License](LICENSE).
 
 ## Hardware

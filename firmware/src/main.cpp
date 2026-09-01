@@ -1209,7 +1209,7 @@ void drawBackAction(int y, bool selected = true) {
   display.fillRect(16, y, 288, 32, selected ? kPanel : kBlack);
   if (selected) display.fillRect(16, y, 5, 32, kBlue);
   display.text(30, y + 9, "BACK TO LAUNCHER", selected ? kWhite : kMuted, 2);
-  rightAligned(292, y + 12, "QUICK L-R", selected ? kWhite : kMuted, 1);
+  rightAligned(292, y + 12, "PUSH / R-L", selected ? kWhite : kMuted, 1);
 }
 
 void drawSettingRow(int y, const char *label, const char *value, bool selected,
@@ -1295,7 +1295,7 @@ void renderOverview() {
   } else if (isStale()) {
     display.text(258, 176, "STALE", kAmber, 1);
   }
-  footer("QUICK R-L MENU  QUICK L-R BACK");
+  footer("PUSH/R-L MENU  HOLD/L-R BACK");
 }
 
 void renderWindows() {
@@ -1315,7 +1315,7 @@ void renderWindows() {
       display.text(18, y + 26, budget.windows[i].window, kMuted, 1);
     }
   }
-  footer("TURN SCROLL  QUICK R-L MENU  QUICK L-R BACK");
+  footer("TURN SCROLL  PUSH/R-L MENU  HOLD/L-R BACK");
 }
 
 void renderConnection() {
@@ -1340,7 +1340,7 @@ void renderConnection() {
                : (accessPointReady ? "192.168.4.1" : "OFFLINE"),
                kBlue, 2);
   display.text(202, 148, "LOGIN: XSURE", kMuted, 1);
-  footer("TURN MENU  QUICK L-R BACK");
+  footer("TURN/PUSH/R-L MENU  HOLD/L-R BACK");
 }
 
 void renderTimerClock(bool includeStatus = true) {
@@ -1363,12 +1363,12 @@ void renderTimer() {
            static_cast<unsigned long>(workTimer.durationSeconds / 60));
   display.centered(132, duration, kWhite, 2);
   display.centered(183,
-                   workTimer.running ? "QUICK RIGHT-LEFT: PAUSE"
-                                     : "TURN: 5 MIN  QUICK R-L: START",
+                   workTimer.running ? "PUSH / QUICK R-L: PAUSE"
+                                     : "TURN: 5 MIN  PUSH / R-L: START",
                    kMuted, 1);
   footer(workTimer.running
-             ? "QUICK R-L PAUSE  QUICK L-R BACK"
-             : "TURN 5 MIN  QUICK R-L START  QUICK L-R BACK");
+             ? "PUSH/R-L PAUSE  HOLD/L-R BACK"
+             : "TURN 5 MIN PUSH/R-L START HOLD/L-R BACK");
 }
 
 void renderApplets() {
@@ -1385,8 +1385,8 @@ void renderApplets() {
                  selected ? kWhite : (installed[i] ? kGreen : kAmber), 2);
     if (selected) {
       display.text(24, y + 34,
-                   installed[i] ? "QUICK R-L TO DISABLE"
-                                : "QUICK R-L TO ENABLE",
+                   installed[i] ? "PUSH / R-L TO DISABLE"
+                                : "PUSH / R-L TO ENABLE",
                    kMuted, 1);
     }
   }
@@ -1396,7 +1396,7 @@ void renderApplets() {
   display.centered(160, active,
                    codexAppletInstalled || timerAppletInstalled ? kGreen : kAmber, 1);
   drawBackAction(174, appletIndex == 2);
-  footer("TURN SELECT  QUICK R-L ACT  QUICK L-R BACK");
+  footer("TURN SELECT PUSH/R-L ACT HOLD/L-R BACK");
 }
 
 void renderLeds() {
@@ -1409,7 +1409,7 @@ void renderLeds() {
   drawSettingRow(124, "EVENT GLOW", ledFeedbackEnabled ? "ON" : "OFF",
                  ledField == 2, ledFeedbackEnabled ? kGreen : kMuted);
   drawBackAction(174, ledField == 3);
-  footer("TURN CHANGE  QUICK R-L NEXT  QUICK L-R BACK");
+  footer("TURN CHANGE PUSH/R-L NEXT HOLD/L-R BACK");
 }
 
 void renderDisplay() {
@@ -1424,7 +1424,7 @@ void renderDisplay() {
   display.text(42, 160, "10 MIN", kMuted, 1);
   rightAligned(278, 160, "100 MAX", kMuted, 1);
   drawBackAction(174);
-  footer("TURN ADJUST  QUICK L-R BACK");
+  footer("TURN ADJUST PUSH/R-L/HOLD/L-R BACK");
 }
 
 void renderSounds() {
@@ -1437,7 +1437,7 @@ void renderSounds() {
   drawSettingRow(124, "TEST CUE", soundProfileIndex ? "PLAY" : "MUTED",
                  soundField == 2, soundProfileIndex ? kGreen : kMuted);
   drawBackAction(174, soundField == 3);
-  footer("TURN CHANGE  QUICK R-L NEXT  QUICK L-R BACK");
+  footer("TURN CHANGE PUSH/R-L NEXT HOLD/L-R BACK");
 }
 
 void renderAbout() {
@@ -1447,7 +1447,7 @@ void renderAbout() {
   display.text(50, 126, "FIRMWARE " CODEX_BUDGET_FIRMWARE_VERSION, kMuted, 1);
   display.text(50, 148, "ESP32-WROOM-32D", kMuted, 1);
   display.text(50, 170, "FACTORY RESTORE SAVED", kGreen, 1);
-  footer("QUICK R-L MENU  QUICK L-R BACK");
+  footer("PUSH/R-L MENU  HOLD/L-R BACK");
 }
 
 int menuFirstIndex(int selected, int count) {
@@ -1477,7 +1477,7 @@ void renderMenu() {
     const int index = first + row;
     renderMenuRow(entries[index], row, index == menuIndex);
   }
-  footer("TURN SELECT  QUICK R-L OPEN  QUICK L-R CLOSE");
+  footer("TURN SELECT PUSH/R-L OPEN HOLD/L-R CLOSE");
 }
 
 void render() {
